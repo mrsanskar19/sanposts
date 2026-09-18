@@ -21,7 +21,7 @@ import type {
 export interface SelfHealingOptions {
   detector?: DetectorOptions;
   detectorStorage?: DetectorStorage;
-  openrouter?: OpenRouterConfig;
+  openrouter?: OpenRouterConfig | boolean;
   jules?: JulesConfig;
   autoHeal?: boolean;
 }
@@ -40,13 +40,17 @@ export class SelfHealingModules {
   public readonly detector: Detector;
   public readonly openrouter: OpenRouterAnalyzer;
   public readonly jules: JulesAgent;
+  public readonly openrouterEnabled: boolean;
 
   // AI Deduplication Registry: guarantees the same file and same error is NEVER sent to AI again
   private readonly sentToAiFingerprints = new Set<string>();
   private readonly sentToAiFileErrors = new Set<string>();
 
   constructor(options: SelfHealingOptions = {}) {
-    this.openrouter = new OpenRouterAnalyzer(options.openrouter);
+    this.openrouterEnabled = options.openrouter !== false;
+    this.openrouter = new OpenRouterAnalyzer(
+      typeof options.openrouter === "object" ? options.openrouter : {}
+    );
     this.jules = new JulesAgent(options.jules);
 
     const autoHealEnabled = options.autoHeal ?? true;
@@ -104,6 +108,7 @@ export class SelfHealingModules {
     options?: {
       codebaseContext?: Record<string, string>;
       julesOptions?: JulesExecutionOptions;
+      openrouter?: boolean;
     }
   ): Promise<HealResult> {
     let incident: DetectedError | undefined;
@@ -155,32 +160,40 @@ export class SelfHealingModules {
     this.sentToAiFingerprints.add(incident.fingerprint);
     this.sentToAiFileErrors.add(fileErrorKey);
 
-    // Step 1: OpenRouter AI Diagnosis
-    console.log(
-      `[Self-Healing] 🤖 OpenRouter API Request Sent: Analyzing error for "${incident.error.message}" in "${targetFile || "codebase"}"...`
-    );
+    // Determine whether to use OpenRouter or route directly to Google Jules
+    const useOpenRouter =
+      this.openrouterEnabled && options?.openrouter !== false;
 
-    const analysis = await this.openrouter.analyze(incident, {
-      relevantCodeFiles: options?.codebaseContext,
-    });
+    let analysis: AnalysisResult | undefined;
+    let spec: FixSpecification;
 
-    if (!analysis.success || !analysis.fixSpecification) {
-      console.warn(
-        `[Self-Healing] ⚠️ OpenRouter Analysis Failed: ${analysis.error || "No fix spec generated."}`
+    if (useOpenRouter) {
+      // Step 1: OpenRouter AI Diagnosis
+      console.log(
+        `[Self-Healing] 🤖 OpenRouter API Request Sent: Analyzing error for "${incident.error.message}" in "${targetFile || "codebase"}"...`
       );
-      return {
-        success: false,
-        incident,
-        analysis,
-        error:
-          analysis.error || "Failed to generate Fix Specification from OpenRouter.",
-      };
-    }
 
-    const spec = analysis.fixSpecification;
-    console.log(
-      `[Self-Healing] 📝 OpenRouter Response Received: Root Cause: "${spec.rootCause}" | Confidence: ${(spec.confidence * 100).toFixed(0)}% | Changes Proposed: ${spec.recommendedChanges.length} file(s)`
-    );
+      analysis = await this.openrouter.analyze(incident, {
+        relevantCodeFiles: options?.codebaseContext,
+      });
+
+      if (analysis.success && analysis.fixSpecification) {
+        spec = analysis.fixSpecification;
+        console.log(
+          `[Self-Healing] 📝 OpenRouter Response Received: Root Cause: "${spec.rootCause}" | Confidence: ${(spec.confidence * 100).toFixed(0)}% | Changes Proposed: ${spec.recommendedChanges.length} file(s)`
+        );
+      } else {
+        console.warn(
+          `[Self-Healing] ⚠️ OpenRouter Analysis Failed: ${analysis.error || "No fix spec generated."}. Routing directly to Google Jules...`
+        );
+        spec = this.createDirectFixSpecification(incident, targetFile);
+      }
+    } else {
+      console.log(
+        `[Self-Healing] ⏭️ OpenRouter is disabled (false). Routing directly to Google Jules...`
+      );
+      spec = this.createDirectFixSpecification(incident, targetFile);
+    }
 
     // Step 2: Google Jules Coding Agent Execution
     console.log(
@@ -209,6 +222,58 @@ export class SelfHealingModules {
       fixSpecification: spec,
       julesResult,
       error: julesResult.error,
+    };
+  }
+
+  /**
+   * Generates a direct FixSpecification from a detected incident
+   * to send directly to Google Jules when OpenRouter is disabled or unsuccessful.
+   */
+  private createDirectFixSpecification(
+    incident: DetectedError,
+    targetFile: string | null
+  ): FixSpecification {
+    const errorDetails = [
+      `Error Name: ${incident.error.name}`,
+      `Error Message: ${incident.error.message}`,
+      targetFile ? `Target Source File: ${targetFile}` : undefined,
+      incident.error.stack ? `Stack Trace:\n${incident.error.stack}` : undefined,
+      incident.error.componentStack
+        ? `Component Stack:\n${incident.error.componentStack}`
+        : undefined,
+      incident.request?.url ? `Request URL: ${incident.request.url}` : undefined,
+      incident.browser?.url ? `Browser URL: ${incident.browser.url}` : undefined,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    return {
+      id: `fix_direct_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`,
+      incidentId: incident.id,
+      fingerprint: incident.fingerprint,
+      detectedFramework:
+        incident.runtimeContext?.framework ||
+        (incident.runtime === "frontend" ? "Next.js / React" : "Node.js"),
+      rootCause: incident.error.message || `${incident.error.name} error`,
+      explanation: `Direct autonomous repair request dispatched to Google Jules (OpenRouter disabled or bypassed):\n\n${errorDetails}`,
+      confidence: 1.0,
+      recommendedChanges: targetFile
+        ? [
+            {
+              filePath: targetFile,
+              action: "modify",
+              description: `Investigate and resolve error "${incident.error.message}" in ${targetFile}`,
+            },
+          ]
+        : [],
+      verificationSteps: [
+        "npm run build",
+        "Verify error no longer reproduces",
+      ],
+      regressionRisks: [
+        "Ensure adjacent components and logic remain operational",
+      ],
+      generatedAt: new Date().toISOString(),
     };
   }
 }

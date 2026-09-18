@@ -98,11 +98,11 @@ export const selfHealing =
     detectorStorage: new SanDBDetectorStorage(),
     openrouter: {
       apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.OPENROUTER_MODEL || "openai/gpt-4o",
+      model: process.env.OPENROUTER_MODEL || "qwen/qwen3.8-27b:free",
     },
     jules: {
       apiKey: process.env.JULES_API_KEY,
-      defaultRepo: process.env.GITHUB_REPOSITORY || "sanposts/sanposts-studio",
+      defaultRepo: process.env.GITHUB_REPOSITORY || "mrsanskar19/sanposts",
     },
   });
 

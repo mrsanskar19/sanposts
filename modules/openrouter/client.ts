@@ -19,7 +19,7 @@ export class OpenRouterAnalyzer {
       model:
         config.model ||
         process.env.OPENROUTER_MODEL ||
-        "openai/gpt-4o-mini",
+        "qwen/qwen3.8-27b:free",
       temperature: config.temperature ?? 0.1,
       maxTokens: config.maxTokens ?? 3000,
       siteUrl: config.siteUrl || "https://sanposts.ai",
