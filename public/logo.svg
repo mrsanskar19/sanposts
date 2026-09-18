@@ -1,0 +1,29 @@
+ <svg
+          width={dimensions.icon}
+          height={dimensions.icon}
+          viewBox="0 0 32 32"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="relative z-10 text-white"
+        >
+          {/* Top curve */}
+          <path
+            d="M23 10.5C23 7.46 20.31 5 17 5H11C7.69 5 5 7.46 5 10.5C5 13.54 7.69 16 11 16H21C24.31 16 27 18.46 27 21.5C27 24.54 24.31 27 21 27H15C11.69 27 9 24.54 9 21.5"
+            stroke="url(#logo_grad_1)"
+            strokeWidth="3.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          {/* Pulsing signal nodes */}
+          <circle cx="21" cy="10.5" r="2.5" fill="#818cf8" />
+          <circle cx="11" cy="21.5" r="2.5" fill="#6366f1" />
+          <circle cx="25" cy="5" r="1.5" fill="#c7d2fe" />
+
+          <defs>
+            <linearGradient id="logo_grad_1" x1="5" y1="5" x2="27" y2="27" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#ffffff" />
+              <stop offset="0.5" stopColor="#818cf8" />
+              <stop offset="1" stopColor="#4f46e5" />
+            </linearGradient>
+          </defs>
+        </svg>
